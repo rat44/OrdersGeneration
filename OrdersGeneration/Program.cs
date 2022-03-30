@@ -12,6 +12,13 @@ using Newtonsoft.Json;
 namespace OrdersGeneration
 {
     // Root myDeserializedClass = JsonConvert.DeserializeObject<Root>(myJsonResponse);
+
+    public class OrderProduct : Product
+    {
+        public int order_id { get; set; }
+
+    }
+
     public class Product
     {
         public string storage { get; set; }
@@ -127,7 +134,7 @@ namespace OrdersGeneration
 
         static List<Order> GetOrders()
         {
-            var httpResponse = getResponse("method=getOrders");
+            var httpResponse = GetResponse("method=getOrders");
             using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
             {
                 var result = streamReader.ReadToEnd();
@@ -154,7 +161,6 @@ namespace OrdersGeneration
             BaseOrder newOrder = JsonConvert.DeserializeObject<BaseOrder>(orderJson);
             var newOrderJson = JsonConvert.SerializeObject(newOrder);
 
-
             var parameters = newOrderJson;
             var encoded = WebUtility.UrlEncode(parameters);
             var httpResponse = GetResponse("method=addOrder" + "&parameters=" + encoded);
@@ -166,8 +172,41 @@ namespace OrdersGeneration
             }
 
             return null;
+        }
 
-   
+        static string AddOrderProduct(Order order)
+        {
+            OrderProduct orderProduct = new OrderProduct
+            {
+                order_id = order.order_id,
+                storage = "db",
+                storage_id = "0",
+                product_id = "777",
+                variant_id = "0",
+                name = "Gratis",
+                sku = "",
+                ean = "",
+                location = "",
+                attributes = "",
+                price_brutto = 1,
+                tax_rate = 0,
+                quantity = 2,
+                weight = 0
+            };
+
+            var newOrderJson = JsonConvert.SerializeObject(orderProduct);
+
+            var parameters = newOrderJson;
+            var encoded = WebUtility.UrlEncode(parameters);
+            var httpResponse = GetResponse("method=addOrderProduct" + "&parameters=" + encoded);
+
+            using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
+            {
+                var result = streamReader.ReadToEnd();
+                return result;
+            }
+
+            return null;
         }
 
         static void Main(string[] args)
@@ -175,8 +214,10 @@ namespace OrdersGeneration
             var orders = GetOrders();
             var order = GetOrderByID(30179559);
             var test = CopyOrder(order);
+            var product = AddOrderProduct(order);
             Console.WriteLine("MSG {0}", test);
             Console.WriteLine("Order ID is {0}", order.order_id);
+            Console.WriteLine("Product ID is {0}", product);
             Console.ReadKey();
 
         }
