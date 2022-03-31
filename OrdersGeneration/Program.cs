@@ -27,7 +27,7 @@ namespace OrdersGeneration
         {
             var consoleLog = true;
             var logPath = "";
-            string exitLine;
+
             Console.WriteLine("Show logs in console? (no for save log in file) y/n");
             var inputLogAnswer = Console.ReadLine();
             if (inputLogAnswer == "n")
