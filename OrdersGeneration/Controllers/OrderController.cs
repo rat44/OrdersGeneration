@@ -57,7 +57,7 @@ namespace OrdersGeneration.Controllers
         {
             var orderJson = JsonConvert.SerializeObject(order);
             BaseOrder newOrder = JsonConvert.DeserializeObject<BaseOrder>(orderJson);
-            newOrder.extra_field_1 = "Zamówienie utworzone na podstawie <numer oryginalnego zamówienia " + order.order_id;
+            newOrder.extra_field_1 = "Zamówienie utworzone na podstawie " + order.order_id;
             var newOrderJson = JsonConvert.SerializeObject(newOrder);
 
             var parameters = newOrderJson;
