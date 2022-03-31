@@ -105,9 +105,33 @@ namespace OrdersGeneration
         public List<Order> orders { get; set; }
     }
 
+    public class ErrorMEssage
+    {
+        public string status { get; set; }
+        public string error_code { get; set; }
+        public string error_message { get; set; }
+    }
+
+    public class CopyOrder
+    {
+        public string status { get; set; }
+        public int order_id { get; set; }
+    }
+
+    public class ProductCreated
+    {
+        public string status { get; set; }
+        public int order_product_id { get; set; }
+    }
 
     internal class Program
     {
+        static void GenLog(bool consoleVIew, string message)
+        {
+            var time = DateTime.Now.ToShortTimeString();
+            if (consoleVIew)
+               Console.WriteLine("{0} Log message: {1}", time, message);
+        }
         static HttpWebRequest CreateAuthorization()
         {
             var url = "https://api.baselinker.com/connector.php";
@@ -129,95 +153,158 @@ namespace OrdersGeneration
             {
                 streamWriter.Write(method);
             }
-            return (HttpWebResponse)httpRequest.GetResponse();
+            var response = (HttpWebResponse)httpRequest.GetResponse();
+            if (response != null && response.StatusCode == HttpStatusCode.OK)
+                return response;
+            else
+                return null;
         }
 
         static List<Order> GetOrders()
         {
             var httpResponse = GetResponse("method=getOrders");
-            using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
+            if (httpResponse != null)
             {
-                var result = streamReader.ReadToEnd();
-                var root = JsonConvert.DeserializeObject<Root>(result);
-                return root.orders;
+                using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
+                {
+                    var result = streamReader.ReadToEnd();
+                    var response = JsonConvert.DeserializeObject<Root>(result);
+                    if (response.status != "SUCCESS")
+                    {
+                        var errorMessage = JsonConvert.DeserializeObject<ErrorMEssage>(result);
+                        GenLog(true, "method=getOrders: " + errorMessage.error_code + ": " + errorMessage.error_message);
+                    }
+                    else
+                        return response.orders;
+                }
             }
+            return null;
         }
 
         //There is no api method for getting only one order by ID
         static Order GetOrderByID(int orderID)
         {
             var orders = GetOrders();
-            var httpResponse = GetResponse("method=addOrders");
-            Order order = orders.Where(x => x.order_id == orderID).FirstOrDefault();
-            if (order != null)
-                return order;
-
+            if (orders != null)
+            {
+                var httpResponse = GetResponse("method=addOrders");
+                if (httpResponse != null)
+                {
+                    Order order = orders.Where(x => x.order_id == orderID).FirstOrDefault();
+                    if (order != null)
+                        return order;
+                    else
+                        GenLog(true, "method=addOrders: OrderID: " + orderID + "not found.");
+                }
+            }
             return null;
         }
 
-        static string CopyOrder(Order order)
+        static int CopyOrder(Order order)
         {
             var orderJson = JsonConvert.SerializeObject(order);
             BaseOrder newOrder = JsonConvert.DeserializeObject<BaseOrder>(orderJson);
+            newOrder.extra_field_1 = "Zamówienie utworzone na podstawie <numer oryginalnego zamówienia " + order.order_id;
             var newOrderJson = JsonConvert.SerializeObject(newOrder);
 
             var parameters = newOrderJson;
             var encoded = WebUtility.UrlEncode(parameters);
             var httpResponse = GetResponse("method=addOrder" + "&parameters=" + encoded);
-
-            using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
+            if (httpResponse != null)
             {
-                var result = streamReader.ReadToEnd();
-                return result;
+                using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
+                {
+                    var result = streamReader.ReadToEnd();
+                    var response = JsonConvert.DeserializeObject<CopyOrder>(result);
+                    if (response.status != "SUCCESS")
+                    {
+                        var errorMessage = JsonConvert.DeserializeObject<ErrorMEssage>(result);
+                        GenLog(true, "method=addOrder: " + errorMessage.error_code + ": " + errorMessage.error_message);
+                    }
+                    else
+                    {
+                        GenLog(true, "method=addOrder: " + "Order: " + response.order_id + " created, based on: " + order.order_id);
+                        return response.order_id;
+                    }
+                }
             }
-
-            return null;
+            return 0;
         }
 
-        static string AddOrderProduct(Order order)
+        static string AddOrderProduct(int orderID)
         {
-            OrderProduct orderProduct = new OrderProduct
+            if (orderID != 0)
             {
-                order_id = order.order_id,
-                storage = "db",
-                storage_id = "0",
-                product_id = "777",
-                variant_id = "0",
-                name = "Gratis",
-                sku = "",
-                ean = "",
-                location = "",
-                attributes = "",
-                price_brutto = 1,
-                tax_rate = 0,
-                quantity = 2,
-                weight = 0
-            };
+                OrderProduct orderProduct = new OrderProduct
+                {
+                    order_id = orderID,
+                    storage = "db",
+                    storage_id = "0",
+                    product_id = "777",
+                    variant_id = "0",
+                    name = "Gratis",
+                    sku = "",
+                    ean = "",
+                    location = "",
+                    attributes = "",
+                    price_brutto = 1,
+                    tax_rate = 0,
+                    quantity = 1,
+                    weight = 0
+                };
 
-            var newOrderJson = JsonConvert.SerializeObject(orderProduct);
+                var newOrderJson = JsonConvert.SerializeObject(orderProduct);
 
-            var parameters = newOrderJson;
-            var encoded = WebUtility.UrlEncode(parameters);
-            var httpResponse = GetResponse("method=addOrderProduct" + "&parameters=" + encoded);
-
-            using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
-            {
-                var result = streamReader.ReadToEnd();
-                return result;
+                var parameters = newOrderJson;
+                var encoded = WebUtility.UrlEncode(parameters);
+                var httpResponse = GetResponse("method=addOrderProduct" + "&parameters=" + encoded);
+                if (httpResponse != null)
+                {
+                    using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
+                    {
+                        var result = streamReader.ReadToEnd();
+                        var response = JsonConvert.DeserializeObject<ProductCreated>(result);
+                        if (response.status != "SUCCESS")
+                        {
+                            var errorMessage = JsonConvert.DeserializeObject<ErrorMEssage>(result);
+                            GenLog(true, "method=addOrderProduct: " + errorMessage.error_code + ": " + errorMessage.error_message);
+                        }
+                        else
+                        {
+                            GenLog(true, "method=addOrderProduct: " + "Product " + response.order_product_id +  " created for order: " + orderID);
+                            return result;
+                        }
+                    }
+                }
             }
-
+            else
+            {
+                GenLog(true, "method=addOrderProduct: " + "OrderID not found");
+            }
             return null;
         }
 
         static void Main(string[] args)
         {
             var orders = GetOrders();
-            var order = GetOrderByID(30179559);
-            var test = CopyOrder(order);
-            var product = AddOrderProduct(order);
-            Console.WriteLine("MSG {0}", test);
-            Console.WriteLine("Order ID is {0}", order.order_id);
-            Console.WriteLine("Product ID is {0}", product);
+            foreach (var ord in orders)
+            {
+                Console.WriteLine("Available orders: id: {0}", ord.order_id);
+            }
+
+            Console.WriteLine("Provide order id:");
+            var inputOrderId = Console.ReadLine();
+
+            if (int.TryParse(inputOrderId, out int orderId))
+            {
+                var order = GetOrderByID(orderId);
+                var copiedOrderID = CopyOrder(order);
+                var product = AddOrderProduct(copiedOrderID);
+            }
+            else
+            {
+                Console.WriteLine($"{inputOrderId} is not a number");
+            }
             Console.ReadKey();
 
         }
